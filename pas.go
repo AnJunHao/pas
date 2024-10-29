@@ -12,31 +12,29 @@ type promiseTypeContract interface { // unexported
 	get() interface{}
 }
 
-// promise represents a parallel variable holding a value of type T.
-// This type is not exported and should not be used directly.
-type promise[T any] struct {
+// Promise represents a parallel variable holding a value of type T.
+type Promise[T any] struct {
 	value T
 	ready chan struct{}
 	once  sync.Once
 }
 
 // Get returns the computed value, blocking until it is ready.
-func (p *promise[T]) Get() T {
+func (p *Promise[T]) Get() T {
 	<-p.ready
 	return p.value
 }
 
 // get is an unexported method to satisfy the promiseTypeContract interface.
 // It retrieves the value held by the promise, blocking until it's ready.
-func (p *promise[T]) get() interface{} {
+func (p *Promise[T]) get() interface{} {
 	<-p.ready
 	return p.value
 }
 
-// Promise creates a new Promise holding a value of type T.
-// This function is exported and can be used outside the package.
-func Promise[T any](values ...T) *promise[T] {
-	p := &promise[T]{ready: make(chan struct{})}
+// New creates a pointer to a new Promise holding a value of type T.
+func New[T any](values ...T) *Promise[T] {
+	p := &Promise[T]{ready: make(chan struct{})}
 	if len(values) == 0 {
 		// Do not set p.value; leave it zero-valued
 	} else if len(values) == 1 {
@@ -48,11 +46,47 @@ func Promise[T any](values ...T) *promise[T] {
 	return p
 }
 
+// MakeSlice creates a slice of *Promise[T] with the specified length and capacity.
+// Usage example: promises := MakeSlice[int](5)
+func MakeSlice[T any](length int, capacity ...int) []*Promise[T] {
+	cap := length
+	if len(capacity) > 0 {
+		cap = capacity[0]
+	}
+	slice := make([]*Promise[T], length, cap)
+	for i := range slice {
+		slice[i] = New[T]()
+	}
+	return slice
+}
+
+// MakeMap creates a map with keys of type K and values of type *Promise[V].
+// The optional size parameter can be used to hint the initial size of the map.
+// Usage example: promiseMap := MakeMap[string, int](10)
+func MakeMap[K comparable, V any](size ...int) map[K]*Promise[V] {
+	var m map[K]*Promise[V]
+	if len(size) > 0 {
+		m = make(map[K]*Promise[V], size[0])
+	} else {
+		m = make(map[K]*Promise[V])
+	}
+	return m
+}
+
+// MakeChan creates a channel of *Promise[T] with an optional buffer size.
+// Usage example: promiseChan := MakeChan[int](bufferSize)
+func MakeChan[T any](buffer ...int) chan *Promise[T] {
+	if len(buffer) > 0 {
+		return make(chan *Promise[T], buffer[0])
+	}
+	return make(chan *Promise[T])
+}
+
 // Async starts a parallel computation by invoking function f with the provided arguments.
 // If any argument is a Promise, it waits for it to be ready before executing f.
 // It enforces that function f has exactly one return value of type T.
-func Async[T any](f interface{}, args ...interface{}) *promise[T] {
-	p := &promise[T]{ready: make(chan struct{})}
+func Async[T any](f interface{}, args ...interface{}) *Promise[T] {
+	p := &Promise[T]{ready: make(chan struct{})}
 
 	// Start a goroutine to execute the function in parallel
 	go func() {

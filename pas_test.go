@@ -6,12 +6,12 @@ import (
 )
 
 func TestPromise(t *testing.T) {
-	p := Promise(10)
+	p := New(10)
 	if val := p.Get(); val != 10 {
 		t.Errorf("Expected 10, got %v", val)
 	}
 
-	pEmpty := Promise[int]()
+	pEmpty := New[int]()
 	if val := pEmpty.Get(); val != 0 {
 		t.Errorf("Expected 0 (zero value), got %v", val)
 	}
@@ -26,7 +26,7 @@ func Add(a, b int) int {
 }
 
 func TestAsync(t *testing.T) {
-	p := Promise(0)
+	p := New(0)
 	for i := 1; i <= 3; i++ {
 		sq := Async[int](Square, i)
 		p = Async[int](Add, p, sq)
@@ -67,7 +67,7 @@ func TestParallelSum(t *testing.T) {
 	startTime := time.Now()
 
 	// Parallel Sum
-	parSum := Promise(0)
+	parSum := New(0)
 	for i := 0; i < numWorkers; i++ {
 		// Define the start and end for each worker
 		start := i*n/numWorkers + 1
