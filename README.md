@@ -3,14 +3,18 @@
 PAS is a Go package that provides a simple and efficient way to handle asynchronous computations using Promises. By simply wrapping your functions in `pas.Async[T](yourFunction, args...)`, you can instantly make them parallel, without any extra code.
 
 ```go
-// Sequential
+// 🔄 Sequential
 accumulator := -5
 intermediate := Compute(5, 10)
 accumulator = accumulator + intermediate
 result := Calculate(accumulator, 15)
 fmt.Println(result)
+```
 
-// Parallel
+⬇️ ⬇️ ⬇️
+
+```go
+// ⚡️ Parallel
 accumulatorP := pas.New(-5)
 intermediateP := pas.Async[int](Compute, 5, 10)
 accumulatorP = pas.Async[int](Add, accumulatorP, intermediateP)
@@ -57,7 +61,7 @@ go get github.com/AnJunHao/pas@latest
 
 ### Creating Promises
 
-Create a new Promise using the `New` function. You can initialize it with an optional value.
+Create a new Promise using the `New` function. The Promise is immediately ready. You can initialize it with an optional value.
 
 ```go
 import "github.com/AnJunHao/pas"
@@ -65,7 +69,7 @@ import "github.com/AnJunHao/pas"
 // Create a promise with an initial value
 p := pas.New(42)
 
-// Create a promise with its initial value as thedefault value of type T
+// Create a promise with its initial value as the default value of type T
 p := pas.New[int]()
 ```
 
@@ -223,7 +227,7 @@ func Sync[T any](f interface{}, args ...interface{}) T
 
 ### `MakeSlice`
 
-Creates a slice of `*Promise[T]` with the specified length and capacity.
+Creates a slice of `*Promise[T]` with the specified length and capacity. The Promises are immediately ready.
 
 ```go
 func MakeSlice[T any](length int, capacity ...int) []*Promise[T]
