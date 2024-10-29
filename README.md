@@ -32,15 +32,20 @@ fmt.Println(resultP.Get())
     - [Creating Promises](#creating-promises)
     - [Asynchronous Operations](#asynchronous-operations)
     - [Synchronous Operations](#synchronous-operations)
-    - [Examples](#examples)
+    - [Example](#example)
   - [API Reference](#api-reference)
     - [`Promise`](#promise)
+    - [`Promise.Get`](#promiseget)
     - [`New`](#new)
     - [`Async`](#async)
     - [`Sync`](#sync)
     - [`MakeSlice`](#makeslice)
     - [`MakeMap`](#makemap)
     - [`MakeChan`](#makechan)
+    - [Advanced API](#advanced-api)
+      - [`NewPending`](#newpending)
+      - [`MakePendingSlice`](#makependingslice)
+      - [`Promise.Resolve`](#promiseresolve)
   - [License](#license)
 
 ## Features
@@ -104,7 +109,7 @@ p1 := pas.Async[int](Compute, 5, 10)
 result := pas.Sync[int](Multiply, p1, 3)
 ```
 
-### Examples
+### Example
 
 Here's a complete example demonstrating parallel sum computation:
 
@@ -179,9 +184,13 @@ type Promise[T any] struct {
 }
 ```
 
-**Methods:**
+### `Promise.Get`
 
-- `Get() T`: Returns the computed value, blocking until it is ready.
+Returns the computed value, blocking until it is ready.
+
+```go
+func (p *Promise[T]) Get() T
+```
 
 ### `New`
 
@@ -290,6 +299,32 @@ func MakeChan[T any](buffer ...int) chan *Promise[T]
 
 ```go
 promiseChan := pas.MakeChan[int](bufferSize)
+```
+
+### Advanced API
+
+#### `NewPending`
+
+Creates a new Promise that is not yet ready. User must call `Resolve` to set the value of the Promise.
+
+```go
+func NewPending[T any]() *Promise[T]
+```
+
+#### `MakePendingSlice`
+
+Creates a slice of `*Promise[T]` with the specified length and capacity. The Promises are not yet ready.
+
+```go
+func MakePendingSlice[T any](length int, capacity ...int) []*Promise[T]
+```
+
+#### `Promise.Resolve`
+
+Sets the value of the Promise and marks it as ready.
+
+```go
+func (p *Promise[T]) Resolve(value T)
 ```
 
 ## License
