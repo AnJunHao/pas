@@ -1,4 +1,3 @@
-```markdown
 # PAS: Promise, Async, Sync
 
 PAS is a Go package that provides a simple and efficient way to handle asynchronous computations using Promises. By simply wrapping your functions in `pas.Async[T](yourFunction, args...)`, you can instantly make them parallel, without any extra code.
@@ -17,22 +16,23 @@ fmt.Println(resultP.Get())
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-  - [Creating Promises](#creating-promises)
-  - [Asynchronous Operations](#asynchronous-operations)
-  - [Synchronous Operations](#synchronous-operations)
-  - [Examples](#examples)
-- [API Reference](#api-reference)
-  - [`Promise`](#promise)
-  - [`Async`](#async)
-  - [`Sync`](#sync)
-  - [`MakeSlice`](#makeslice)
-  - [`MakeMap`](#makemap)
-  - [`MakeChan`](#makechan)
-- [License](#license)
+- [PAS: Promise, Async, Sync](#pas-promise-async-sync)
+  - [Table of Contents](#table-of-contents)
+  - [Features](#features)
+  - [Installation](#installation)
+  - [Usage](#usage)
+    - [Creating Promises](#creating-promises)
+    - [Asynchronous Operations](#asynchronous-operations)
+    - [Synchronous Operations](#synchronous-operations)
+    - [Examples](#examples)
+  - [API Reference](#api-reference)
+    - [`Promise`](#promise)
+    - [`Async`](#async)
+    - [`Sync`](#sync)
+    - [`MakeSlice`](#makeslice)
+    - [`MakeMap`](#makemap)
+    - [`MakeChan`](#makechan)
+  - [License](#license)
 
 ## Features
 
