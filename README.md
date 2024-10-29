@@ -4,13 +4,17 @@ PAS is a Go package that provides a simple and efficient way to handle asynchron
 
 ```go
 // Sequential
+accumulator := -5
 intermediate := Compute(5, 10)
-result := Calculate(intermediate, 15)
+accumulator = accumulator + intermediate
+result := Calculate(accumulator, 15)
 fmt.Println(result)
 
 // Parallel
+accumulatorP := pas.New(-5)
 intermediateP := pas.Async[int](Compute, 5, 10)
-resultP := pas.Async[int](Calculate, intermediateP, 15) // Dependencies are automatically handled
+accumulatorP = pas.Async[int](Add, accumulatorP, intermediateP)
+resultP := pas.Async[int](Calculate, accumulatorP, 15) // Dependencies are automatically handled
 fmt.Println(resultP.Get())
 ```
 
@@ -27,6 +31,7 @@ fmt.Println(resultP.Get())
     - [Examples](#examples)
   - [API Reference](#api-reference)
     - [`Promise`](#promise)
+    - [`New`](#new)
     - [`Async`](#async)
     - [`Sync`](#sync)
     - [`MakeSlice`](#makeslice)
@@ -173,6 +178,14 @@ type Promise[T any] struct {
 **Methods:**
 
 - `Get() T`: Returns the computed value, blocking until it is ready.
+
+### `New`
+
+Creates a new Promise with an optional initial value. The Promise is immediately ready.
+
+```go
+func New[T any](value ...T) *Promise[T]
+```
 
 ### `Async`
 
