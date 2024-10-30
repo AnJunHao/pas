@@ -297,6 +297,7 @@ promiseMap := pas.MakeMap[string, int](10)
 - `Async` and `Sync` do not work with methods (functions with a receiver).
 - `Async` and `Sync` do not work with variadic functions (functions with a variable number of arguments).
 - No pooling mechanism is implemented (yet). Each call to `Async` creates a new goroutine.
+- We intentionally unexported methods like `Promise.resolve` and `newPending` to simplify API surface.
 
 ## Implementation Details
 
