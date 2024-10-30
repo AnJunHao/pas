@@ -9,7 +9,7 @@ Promises are resolved automatically when they are used as arguments to other PAS
 array := make([]int, 100)
 for i := range array {
     if i <= 50 {
-	    array[i] = Compute(i, 0) // Some intensive computation
+        array[i] = Compute(i, 0) // Some intensive computation
     } else {
         array[i] = Compute(i, array[i-50]) // Complex inter-dependency
     }
@@ -26,7 +26,7 @@ array := pas.MakeSlice[int](10) // or: make([]*pas.Promise[int], 10)
 for i := range array {
     if i <= 5 {
         // No need to change implementation of Compute
-	    array[i] = pas.Async[int](Compute, i, 0)
+        array[i] = pas.Async[int](Compute, i, 0)
     } else {
         // Dependencies are automatically handled
         array[i] = pas.Async[int](Compute, i, array[i-5])
