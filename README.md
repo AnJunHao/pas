@@ -2,24 +2,39 @@
 
 PAS is a Go package that provides a simple and efficient way to handle asynchronous computations using Promises. By simply wrapping your functions in `pas.Async[T](yourFunction, args...)`, you can instantly make them parallel, without any extra code.
 
+Promises are resolved automatically when they are used as arguments to other PAS-wrapped functions. Promises that are nested arbitrarily deep inside slices, maps, or pointers are also resolved automatically.
+
 ```go
 // 🔄 Sequential
-accumulator := -5
-intermediate := Compute(5, 10)
-accumulator = accumulator + intermediate
-result := Calculate(accumulator, 15)
-fmt.Println(result)
+array := make([]int, 100)
+for i := range array {
+    if i <= 50 {
+	    array[i] = Compute(i, 0) // Some intensive computation
+    } else {
+        array[i] = Compute(i, array[i-50]) // Complex inter-dependency
+    }
+}
+sum := Sum(array)
+fmt.Println(sum)
 ```
 
 ⬇️ ⬇️ ⬇️
 
 ```go
 // ⚡️ Parallel
-accumulatorP := pas.New(-5)
-intermediateP := pas.Async[int](Compute, 5, 10)
-accumulatorP = pas.Async[int](Add, accumulatorP, intermediateP)
-resultP := pas.Async[int](Calculate, accumulatorP, 15) // Dependencies are automatically handled
-fmt.Println(resultP.Get())
+array := pas.MakeSlice[int](10) // or: make([]*pas.Promise[int], 10)
+for i := range array {
+    if i <= 5 {
+        // No need to change implementation of Compute
+	    array[i] = pas.Async[int](Compute, i, 0)
+    } else {
+        // Dependencies are automatically handled
+        array[i] = pas.Async[int](Compute, i, array[i-5])
+    }
+}
+// Promised values inside slices/maps/pointers are automatically resolved
+sum := pas.Sync[int](Sum, array)
+fmt.Println(sum)
 ```
 
 ## Table of Contents
@@ -41,18 +56,13 @@ fmt.Println(resultP.Get())
     - [`Sync`](#sync)
     - [`MakeSlice`](#makeslice)
     - [`MakeMap`](#makemap)
-    - [`MakeChan`](#makechan)
-    - [Advanced API](#advanced-api)
-      - [`NewPending`](#newpending)
-      - [`MakePendingSlice`](#makependingslice)
-      - [`Promise.Resolve`](#promiseresolve)
   - [License](#license)
 
 ## Features
 
 - **Promises:** Represent future values, allowing you to handle results of asynchronous operations.
-- **Async:** Execute functions in parallel with automatic handling of dependent Promises.
-- **Sync:** Execute functions synchronously with automatic handling of dependent Promises.
+- **Async:** Execute functions in parallel with automatic handling of dependent (even nested) Promises.
+- **Sync:** Execute functions synchronously with automatic handling of dependent (even nested) Promises.
 
 ## Installation
 
@@ -194,7 +204,7 @@ func (p *Promise[T]) Get() T
 
 ### `New`
 
-Creates a new Promise with an optional initial value. The Promise is immediately ready.
+Creates a pointer to a new Promise with an optional initial value. The Promise is immediately ready.
 
 ```go
 func New[T any](value ...T) *Promise[T]
@@ -277,54 +287,6 @@ func MakeMap[K comparable, V any](size ...int) map[K]*Promise[V]
 
 ```go
 promiseMap := pas.MakeMap[string, int](10)
-```
-
-### `MakeChan`
-
-Creates a channel of `*Promise[T]` with an optional buffer size.
-
-```go
-func MakeChan[T any](buffer ...int) chan *Promise[T]
-```
-
-**Parameters:**
-
-- `buffer` (optional): Buffer size of the channel.
-
-**Returns:**
-
-- `chan *Promise[T]`: A channel for Promises.
-
-**Usage:**
-
-```go
-promiseChan := pas.MakeChan[int](bufferSize)
-```
-
-### Advanced API
-
-#### `NewPending`
-
-Creates a new Promise that is not yet ready. User must call `Resolve` to set the value of the Promise.
-
-```go
-func NewPending[T any]() *Promise[T]
-```
-
-#### `MakePendingSlice`
-
-Creates a slice of `*Promise[T]` with the specified length and capacity. The Promises are not yet ready.
-
-```go
-func MakePendingSlice[T any](length int, capacity ...int) []*Promise[T]
-```
-
-#### `Promise.Resolve`
-
-Sets the value of the Promise and marks it as ready.
-
-```go
-func (p *Promise[T]) Resolve(value T)
 ```
 
 ## License

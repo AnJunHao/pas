@@ -25,9 +25,9 @@ func (p *Promise[T]) Get() T {
 	return p.value
 }
 
-// Resolve sets the value of the Promise and marks it as ready.
+// resolve sets the value of the Promise and marks it as ready.
 // It can only be called once; subsequent calls will have no effect.
-func (p *Promise[T]) Resolve(value T) {
+func (p *Promise[T]) resolve(value T) {
 	p.once.Do(func() {
 		p.value = value
 		close(p.ready)
@@ -57,73 +57,29 @@ func New[T any](values ...T) *Promise[T] {
 	return p
 }
 
-// NewPending creates a pointer to a new Promise holding a value of type T that is not yet ready.
-func NewPending[T any]() *Promise[T] {
+// newPending creates a pointer to a new Promise holding a value of type T that is not yet ready.
+func newPending[T any]() *Promise[T] {
 	return &Promise[T]{ready: make(chan struct{})}
-}
-
-// MakeSlice creates a slice of *Promise[T] with the specified length and capacity.
-// Usage example: promises := MakeSlice[int](5)
-func MakeSlice[T any](length int, capacity ...int) []*Promise[T] {
-	cap := length
-	if len(capacity) > 0 {
-		cap = capacity[0]
-	}
-	slice := make([]*Promise[T], length, cap)
-	for i := range slice {
-		slice[i] = New[T]()
-	}
-	return slice
-}
-
-// MakePendingSlice creates a slice of *Promise[T] with the specified length and capacity.
-// Usage example: promises := MakePendingSlice[int](5)
-func MakePendingSlice[T any](length int, capacity ...int) []*Promise[T] {
-	cap := length
-	if len(capacity) > 0 {
-		cap = capacity[0]
-	}
-	slice := make([]*Promise[T], length, cap)
-	for i := range slice {
-		slice[i] = NewPending[T]()
-	}
-	return slice
-}
-
-// MakeMap creates a map with keys of type K and values of type *Promise[V].
-// The optional size parameter can be used to hint the initial size of the map.
-// Usage example: promiseMap := MakeMap[string, int](10)
-func MakeMap[K comparable, V any](size ...int) map[K]*Promise[V] {
-	var m map[K]*Promise[V]
-	if len(size) > 0 {
-		m = make(map[K]*Promise[V], size[0])
-	} else {
-		m = make(map[K]*Promise[V])
-	}
-	return m
-}
-
-// MakeChan creates a channel of *Promise[T] with an optional buffer size.
-// Usage example: promiseChan := MakeChan[int](bufferSize)
-func MakeChan[T any](buffer ...int) chan *Promise[T] {
-	if len(buffer) > 0 {
-		return make(chan *Promise[T], buffer[0])
-	}
-	return make(chan *Promise[T])
 }
 
 // Async starts a parallel computation by invoking function f with the provided arguments.
 // If any argument is a Promise, it waits for it to be ready before executing f.
 // It enforces that function f has exactly one return value of type T.
 func Async[T any](f interface{}, args ...interface{}) *Promise[T] {
-	p := NewPending[T]()
+	p := newPending[T]()
 
 	// Start a goroutine to execute the function in parallel
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Handle panics gracefully; in production, consider logging or handling differently
+				fmt.Printf("Async: function execution panicked: %v\n", r)
+			}
+		}()
 		// Execute the function and get the result
 		output := executeFunction[T](f, args...)
 		// Assign the result to the Promise and signal readiness
-		p.Resolve(output)
+		p.resolve(output)
 	}()
 
 	return p
@@ -138,18 +94,52 @@ func Sync[T any](f interface{}, args ...interface{}) T {
 }
 
 // executeFunction is a helper that encapsulates the common logic for Async and Sync.
-// It validates the function, resolves arguments, invokes the function, and asserts the return type.
+// It validates the function, resolves arguments based on the expected parameter types,
+// invokes the function, and asserts the return type.
 func executeFunction[T any](f interface{}, args ...interface{}) T {
-	resolvedArgs := resolveArgs(args...)
-
 	fv := reflect.ValueOf(f)
+	ft := fv.Type()
+
+	// Validate that f is a function
 	if fv.Kind() != reflect.Func {
 		panic(fmt.Sprintf("pas.executeFunction: expected a function, but got %T", f))
 	}
 
 	// Enforce that f has exactly one return value
-	if fv.Type().NumOut() != 1 {
-		panic(fmt.Sprintf("pas.executeFunction: function must have exactly one return value, but got %d values", fv.Type().NumOut()))
+	if ft.NumOut() != 1 {
+		panic(fmt.Sprintf("pas.executeFunction: function must have exactly one return value, but got %d values", ft.NumOut()))
+	}
+
+	// Enforce that the number of arguments matches
+	if ft.NumIn() != len(args) {
+		panic(fmt.Sprintf("pas.executeFunction: function expects %d arguments, but got %d", ft.NumIn(), len(args)))
+	}
+
+	// Resolve arguments based on the expected parameter types
+	resolvedArgs := make([]reflect.Value, len(args))
+	for i, arg := range args {
+		expectedType := ft.In(i)
+		resolved, err := resolveValue(arg, expectedType)
+		if err != nil {
+			panic(fmt.Sprintf("pas.executeFunction: error resolving argument %d: %v", i, err))
+		}
+		// Handle nil inputs by setting zero value if necessary
+		if resolved == nil {
+			resolvedArgs[i] = reflect.Zero(expectedType)
+		} else {
+			resolvedVal := reflect.ValueOf(resolved)
+			// Ensure the resolved argument can be assigned to the expected type
+			if !resolvedVal.Type().AssignableTo(expectedType) {
+				// Attempt to convert if possible
+				if resolvedVal.Type().ConvertibleTo(expectedType) {
+					resolvedVal = resolvedVal.Convert(expectedType)
+				} else {
+					panic(fmt.Sprintf("pas.executeFunction: argument %d has type %s, expected %s",
+						i, resolvedVal.Type(), expectedType))
+				}
+			}
+			resolvedArgs[i] = resolvedVal
+		}
 	}
 
 	// Call the function with the resolved arguments
@@ -168,22 +158,110 @@ func executeFunction[T any](f interface{}, args ...interface{}) T {
 	return output
 }
 
-// resolveArgs processes the arguments, waiting for any Promise to be ready and retrieving its value.
-// If an argument is not a Promise, it is used as-is.
-func resolveArgs(args ...interface{}) []reflect.Value {
-	resolved := make([]reflect.Value, len(args))
-
-	for i, arg := range args {
-		// Type assertion to check if arg implements promiseTypeContract
-		if promiseArg, ok := arg.(promiseTypeContract); ok {
-			// Retrieve the value from the promise
-			value := promiseArg.get()
-			resolved[i] = reflect.ValueOf(value)
-		} else {
-			// Use the argument as-is
-			resolved[i] = reflect.ValueOf(arg)
-		}
+// resolveValue recursively resolves Promises within the input based on the expectedType.
+// It handles Promises, pointers, slices, arrays, maps, and nested combinations thereof.
+// expectedType defines the type that the resolved value should conform to.
+func resolveValue(input interface{}, expectedType reflect.Type) (interface{}, error) {
+	if input == nil {
+		// Return zero value of expectedType
+		return reflect.Zero(expectedType).Interface(), nil
 	}
 
-	return resolved
+	// Handle Promise
+	if promise, ok := input.(promiseTypeContract); ok {
+		resolved := promise.get()
+		return resolveValue(resolved, expectedType)
+	}
+
+	currentType := reflect.TypeOf(input)
+
+	// Handle Pointer Types
+	if expectedType.Kind() == reflect.Ptr {
+		if currentType.Kind() != reflect.Ptr {
+			return nil, fmt.Errorf("expected a pointer of type %s, but got %s", expectedType, currentType)
+		}
+		// Resolve the value the pointer points to
+		resolvedElem, err := resolveValue(reflect.ValueOf(input).Elem().Interface(), expectedType.Elem())
+		if err != nil {
+			return nil, err
+		}
+		// Create a new pointer of the expected type and set its value
+		newPtr := reflect.New(expectedType.Elem())
+		newPtr.Elem().Set(reflect.ValueOf(resolvedElem))
+		return newPtr.Interface(), nil
+	}
+
+	switch expectedType.Kind() {
+	case reflect.Slice:
+		// Handle Slice Types
+		inputVal := reflect.ValueOf(input)
+		if inputVal.Kind() != reflect.Slice {
+			return nil, fmt.Errorf("expected a slice, but got %s", inputVal.Kind())
+		}
+		newSlice := reflect.MakeSlice(expectedType, inputVal.Len(), inputVal.Len())
+		for i := 0; i < inputVal.Len(); i++ {
+			resolvedElem, err := resolveValue(inputVal.Index(i).Interface(), expectedType.Elem())
+			if err != nil {
+				return nil, fmt.Errorf("error resolving slice element at index %d: %v", i, err)
+			}
+			newSlice.Index(i).Set(reflect.ValueOf(resolvedElem))
+		}
+		return newSlice.Interface(), nil
+
+	case reflect.Array:
+		// Handle Array Types
+		inputVal := reflect.ValueOf(input)
+		if inputVal.Kind() != reflect.Array {
+			return nil, fmt.Errorf("expected an array, but got %s", inputVal.Kind())
+		}
+		if inputVal.Len() != expectedType.Len() {
+			return nil, fmt.Errorf("expected array of length %d, but got %d", expectedType.Len(), inputVal.Len())
+		}
+		newArray := reflect.New(expectedType).Elem()
+		for i := 0; i < inputVal.Len(); i++ {
+			resolvedElem, err := resolveValue(inputVal.Index(i).Interface(), expectedType.Elem())
+			if err != nil {
+				return nil, fmt.Errorf("error resolving array element at index %d: %v", i, err)
+			}
+			newArray.Index(i).Set(reflect.ValueOf(resolvedElem))
+		}
+		return newArray.Interface(), nil
+
+	case reflect.Map:
+		// Handle Map Types
+		inputVal := reflect.ValueOf(input)
+		if inputVal.Kind() != reflect.Map {
+			return nil, fmt.Errorf("expected a map, but got %s", inputVal.Kind())
+		}
+		newMap := reflect.MakeMapWithSize(expectedType, inputVal.Len())
+		for _, key := range inputVal.MapKeys() {
+			// Resolve the key
+			resolvedKey, err := resolveValue(key.Interface(), expectedType.Key())
+			if err != nil {
+				return nil, fmt.Errorf("error resolving map key %v: %v", key.Interface(), err)
+			}
+			// Resolve the value
+			resolvedValue, err := resolveValue(inputVal.MapIndex(key).Interface(), expectedType.Elem())
+			if err != nil {
+				return nil, fmt.Errorf("error resolving map value for key %v: %v", resolvedKey, err)
+			}
+			newMap.SetMapIndex(reflect.ValueOf(resolvedKey), reflect.ValueOf(resolvedValue))
+		}
+		return newMap.Interface(), nil
+
+	case reflect.Interface:
+		// If the expected type is interface{}, return the input as-is after resolving any Promises
+		return input, nil
+
+	default:
+		// Handle Basic Types and Perform Necessary Conversions
+		inputVal := reflect.ValueOf(input)
+		if inputVal.Type().AssignableTo(expectedType) {
+			return input, nil
+		}
+		if inputVal.Type().ConvertibleTo(expectedType) {
+			return inputVal.Convert(expectedType).Interface(), nil
+		}
+		return nil, fmt.Errorf("cannot assign or convert %s to %s", inputVal.Type(), expectedType)
+	}
 }
