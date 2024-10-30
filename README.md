@@ -56,6 +56,8 @@ fmt.Println(sum)
     - [`Sync`](#sync)
     - [`MakeSlice`](#makeslice)
     - [`MakeMap`](#makemap)
+  - [Limitations](#limitations)
+  - [Implementation Details](#implementation-details)
   - [License](#license)
 
 ## Features
@@ -90,7 +92,7 @@ p := pas.New[int]()
 
 ### Asynchronous Operations
 
-Use the `Async` function to execute a function in parallel. It takes a function and its arguments, which can include other Promises.
+Use the `Async` function to execute a function in parallel. It takes a function and its arguments, which can include other Promises or nested Promises. Dependent Promises or nested Promises are resolved automatically.
 
 ```go
 import "github.com/AnJunHao/pas"
@@ -106,7 +108,7 @@ result := p.Get() // Blocks until the computation is done
 
 ### Synchronous Operations
 
-Use the `Sync` function to execute a function synchronously. It automatically waits for any Promises passed as arguments to be resolved.
+Use the `Sync` function to execute a function synchronously. It automatically waits for any Promises or nested Promises passed as arguments to be resolved.
 
 ```go
 import "github.com/AnJunHao/pas"
@@ -288,6 +290,23 @@ func MakeMap[K comparable, V any](size ...int) map[K]*Promise[V]
 ```go
 promiseMap := pas.MakeMap[string, int](10)
 ```
+
+## Limitations
+
+- `Async` and `Sync` only work with functions that **return exactly one** value.
+- `Async` and `Sync` do not work with methods (functions with a receiver).
+- `Async` and `Sync` do not work with variadic functions (functions with a variable number of arguments).
+- No pooling mechanism is implemented (yet). Each call to `Async` creates a new goroutine.
+
+## Implementation Details
+
+- `Async` and `Sync` calls an internal function `executeFunction` that handles the details of resolving arguments and calling the function.
+- `executeFunction` uses reflection to inspect the type and value of each argument, and calls `resolveValue` to resolve Promises and nested Promises recursively.
+- `resolveValue` recursively resolves Promises within the input based on the expected type. It handles Promises, pointers, slices, arrays, maps, and nested combinations thereof. Non-Promise arguments are returned as-is.
+  - Example inputs and expected outputs:
+    - `*Promise[int]` -> `int`
+    - `[]*Promise[int]` -> `[]int`
+    - `[]map[string]*Promise[[]map[string]int]` -> `[]map[string][]map[string]int`
 
 ## License
 
