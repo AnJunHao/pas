@@ -115,7 +115,7 @@ func TestSliceOfPromises(t *testing.T) {
 	for i := range arr {
 		arr[i] = Async[int](Square, i)
 	}
-	sum := Sync[int](SumSlice, arr)
+	sum := Sync[int](SumSlice, arr, true)
 	expected := 0
 	for i := 0; i < n; i++ {
 		expected += i * i
@@ -136,7 +136,7 @@ func TestNestedSlicesOfPromises(t *testing.T) {
 		}
 		nestedSlice[i] = inner
 	}
-	sum := Sync[int](SumMatrix, nestedSlice)
+	sum := Sync[int](SumMatrix, nestedSlice, true)
 	// Calculate expected sum
 	expected := 0
 	for i := 0; i < n; i++ {
@@ -156,7 +156,7 @@ func TestMapOfPromises(t *testing.T) {
 	for _, key := range keys {
 		m[key] = Async[int](Square, len(key)) // Square the length of the key
 	}
-	sum := Sync[int](SumMap, m)
+	sum := Sync[int](SumMap, m, true)
 	expected := 0
 	for _, key := range keys {
 		expected += len(key) * len(key)
@@ -188,7 +188,7 @@ func TestNestedMaps(t *testing.T) {
 		}
 		return sum
 	}
-	sum := Sync[int](sumNested, outerMap)
+	sum := Sync[int](sumNested, outerMap, true)
 	// Calculate expected sum
 	expected := 0
 	for i := 0; i < n; i++ {
@@ -224,7 +224,7 @@ func TestMixedNestedStructures(t *testing.T) {
 		}
 		return sum
 	}
-	sum := Sync[int](sumMixed, mappedSlices)
+	sum := Sync[int](sumMixed, mappedSlices, true)
 	// Calculate expected sum
 	expected := 0
 	for i := 0; i < n; i++ {
@@ -240,7 +240,7 @@ func TestMixedNestedStructures(t *testing.T) {
 // TestEmptySlice verifies that the Sync function correctly handles empty slices.
 func TestEmptySlice(t *testing.T) {
 	emptySlice := MakeSlice[int](0)
-	sum := Sync[int](SumSlice, emptySlice)
+	sum := Sync[int](SumSlice, emptySlice, true)
 	expected := 0
 	if sum != expected {
 		t.Errorf("Expected sum %d for empty slice, got %d", expected, sum)
@@ -250,7 +250,7 @@ func TestEmptySlice(t *testing.T) {
 // TestEmptyMap verifies that the Sync function correctly handles empty maps.
 func TestEmptyMap(t *testing.T) {
 	emptyMap := make(map[string]int)
-	sum := Sync[int](SumMap, emptyMap)
+	sum := Sync[int](SumMap, emptyMap, true)
 	expected := 0
 	if sum != expected {
 		t.Errorf("Expected sum %d for empty map, got %d", expected, sum)
@@ -261,14 +261,14 @@ func TestEmptyMap(t *testing.T) {
 // and resolved to the zero value of the expected type.
 func TestNilInput(t *testing.T) {
 	var nilSlice []*Promise[int] = nil
-	sum := Sync[int](SumSlice, nilSlice)
+	sum := Sync[int](SumSlice, nilSlice, true)
 	expected := 0
 	if sum != expected {
 		t.Errorf("Expected sum %d for nil slice, got %d", expected, sum)
 	}
 
 	var nilMap map[string]*Promise[int] = nil
-	sumMap := Sync[int](SumMap, nilMap)
+	sumMap := Sync[int](SumMap, nilMap, true)
 	if sumMap != 0 {
 		t.Errorf("Expected sum %d for nil map, got %d", 0, sumMap)
 	}
@@ -300,7 +300,7 @@ func TestMixedPromisesInSlice(t *testing.T) {
 		}
 		return sum
 	}
-	sum := Sync[int](sumFunc, mixedSlice)
+	sum := Sync[int](sumFunc, mixedSlice, true)
 	if sum != expectedSum {
 		t.Errorf("Expected mixed sum %d, got %d", expectedSum, sum)
 	}
@@ -332,7 +332,7 @@ func TestMixedPromisesInMap(t *testing.T) {
 		}
 		return sum
 	}
-	sum := Sync[int](sumFunc, mixedMap)
+	sum := Sync[int](sumFunc, mixedMap, true)
 	if sum != expectedSum {
 		t.Errorf("Expected mixed map sum %d, got %d", expectedSum, sum)
 	}
@@ -355,7 +355,7 @@ func TestDeeplyNestedStructures(t *testing.T) {
 				sum += v
 			}
 			return fmt.Sprintf("Sum: %d", sum)
-		}, innerMap)
+		}, innerMap, true)
 	}
 	// Define a function to concatenate strings from the slice
 	concatFunc := func(arr []string) string {
@@ -365,7 +365,7 @@ func TestDeeplyNestedStructures(t *testing.T) {
 		}
 		return result
 	}
-	concat := Sync[string](concatFunc, deeplyNested)
+	concat := Sync[string](concatFunc, deeplyNested, true)
 	// Calculate expected sum
 	expectedConcat := ""
 	for i := 0; i < n; i++ {
@@ -420,7 +420,7 @@ func TestPromisesWithDifferentTypes(t *testing.T) {
 		}
 		return resultStruct{sum: sum, concat: concat}
 	}
-	sumConcat := Sync[resultStruct](processMixedStruct, mixedSlice)
+	sumConcat := Sync[resultStruct](processMixedStruct, mixedSlice, true)
 	expectedSum := 0
 	for i := 0; i < n; i += 2 {
 		expectedSum += i * i
@@ -454,7 +454,7 @@ func TestPromisesWithinPointers(t *testing.T) {
 		return sum
 	}
 
-	sum := Sync[int](sumDeref, ptrSlice)
+	sum := Sync[int](sumDeref, ptrSlice, true)
 
 	// Calculate expected sum
 	expected := 0
@@ -475,7 +475,7 @@ func TestNestedStructuresWithZeroValues(t *testing.T) {
 	m["c"] = Async[int](Multiply, 0, 5) // Resolves to 0
 	m["d"] = Async[int](Multiply, 3, 3) // Resolves to 9
 
-	sum := Sync[int](SumMap, m)
+	sum := Sync[int](SumMap, m, true)
 	expected := 0 + 4 + 0 + 9 // Sum is 13
 	if sum != expected {
 		t.Errorf("Expected sum %d, got %d", expected, sum)
@@ -507,7 +507,7 @@ func TestPromisesWithComplexTypes(t *testing.T) {
 	for i := 0; i < n; i++ {
 		peoplePromises[i] = Async[Person](CreatePerson, names[i], ages[i])
 	}
-	sumAges := Sync[int](SumAges, peoplePromises)
+	sumAges := Sync[int](SumAges, peoplePromises, true)
 	expected := 30 + 25 + 35 + 28 + 22 // Sum is 140
 	if sumAges != expected {
 		t.Errorf("Expected sum of ages %d, got %d", expected, sumAges)
@@ -536,7 +536,7 @@ func TestPromisesWithinStructs(t *testing.T) {
 		employees[i].Salary = Async[int](Multiply, (i+1)*1000, 1) // Salaries: 1000, 2000, ..., 5000
 		expectedSum += (i + 1) * 1000
 	}
-	sum := Sync[int](SumSalaries, employees)
+	sum := Sync[int](SumSalaries, employees, true)
 	if sum != expectedSum {
 		t.Errorf("Expected sum of salaries %d, got %d", expectedSum, sum)
 	}
@@ -603,7 +603,7 @@ func TestInterfaceSlice(t *testing.T) {
 	result := Sync[struct {
 		sum    int
 		concat string
-	}](processMixedInterfaceSlice, mixedInterfaceSlice)
+	}](processMixedInterfaceSlice, mixedInterfaceSlice, true)
 
 	// Assertions
 	if result.sum != expectedSum {
@@ -685,7 +685,7 @@ func TestInterfaceMap(t *testing.T) {
 	result := Sync[struct {
 		sum    int
 		concat string
-	}](processMixedInterfaceMap, mixedInterfaceMap)
+	}](processMixedInterfaceMap, mixedInterfaceMap, true)
 
 	// Assertions
 	if result.sum != expectedSum {
@@ -735,7 +735,7 @@ func TestPointersInSliceOfPromises(t *testing.T) {
 	}
 
 	// Execute Sync to resolve all Promises and compute the sum
-	sum := Sync[int](sumPointersSlice, ptrPromiseSlice)
+	sum := Sync[int](sumPointersSlice, ptrPromiseSlice, true)
 
 	// Calculate expected sum
 	expected := 0
@@ -767,7 +767,7 @@ func TestPointersInMapOfPromises(t *testing.T) {
 	}
 
 	// Execute Sync to resolve all Promises and compute the sum
-	sum := Sync[int](sumPointersMapFunc, ptrPromiseMap)
+	sum := Sync[int](sumPointersMapFunc, ptrPromiseMap, true)
 
 	// Calculate expected sum
 	expected := 0
@@ -826,7 +826,7 @@ func TestPromisesWithinComplexPointers_Slice(t *testing.T) {
 	}
 
 	// Execute Sync to resolve all Promises and compute the sum
-	sum := Sync[int](sumOuterSlice, outerPromiseSlice)
+	sum := Sync[int](sumOuterSlice, outerPromiseSlice, true)
 
 	// Calculate expected sum
 	expected := 0
@@ -867,7 +867,7 @@ func TestPromisesWithinComplexPointers_Map(t *testing.T) {
 	}
 
 	// Execute Sync to resolve all Promises and compute the sum
-	sum := Sync[int](sumOuterMap, outerPromiseMap)
+	sum := Sync[int](sumOuterMap, outerPromiseMap, true)
 
 	// Calculate expected sum
 	expected := 0
@@ -924,7 +924,7 @@ func TestDeeplyNestedPointerSliceMap(t *testing.T) {
 	pointerToSlice := &sliceOfMaps
 
 	// Execute Sync with the SumDeepNestedInts function
-	sum := Sync[int](SumDeepNestedInts, pointerToSlice)
+	sum := Sync[int](SumDeepNestedInts, pointerToSlice, true)
 
 	// Calculate the expected sum
 	expected := 0
@@ -998,7 +998,7 @@ func TestMixedNestedPointerSliceMap(t *testing.T) {
 	pointerToSlice := &sliceOfMaps
 
 	// Execute Sync with the TransformMixedStructures function
-	transformed := Sync[map[string][2]string](TransformMixedStructures, pointerToSlice)
+	transformed := Sync[map[string][2]string](TransformMixedStructures, pointerToSlice, true)
 
 	// Calculate the expected transformed map
 	expected := make(map[string][2]string)
@@ -1103,7 +1103,7 @@ func TestParallelSumWithSliceOfPromises(t *testing.T) {
 	for i := range arr {
 		arr[i] = Async[int](SumWithinRange, i*batchSize+1, (i+1)*batchSize)
 	}
-	sum := Sync[int](SumSlice, arr)
+	sum := Sync[int](SumSlice, arr, true)
 	parallelDuration := time.Since(startTime)
 
 	// Log the parallel computation result and duration

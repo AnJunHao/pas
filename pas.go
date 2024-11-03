@@ -65,7 +65,29 @@ func newPending[T any]() *Promise[T] {
 // Async starts a parallel computation by invoking function f with the provided arguments.
 // If any argument is a Promise, it waits for it to be ready before executing f.
 // It enforces that function f has exactly one return value of type T.
+// It accepts an optional boolean flag as the last argument to enable recursive resolving.
 func Async[T any](f interface{}, args ...interface{}) *Promise[T] {
+	var recursive bool
+
+	// Detect if the last argument is a boolean flag for recursive resolving
+	fv := reflect.ValueOf(f)
+	if fv.Kind() != reflect.Func {
+		panic(fmt.Sprintf("Async: expected a function, but got %T", f))
+	}
+	ft := fv.Type()
+	numRequiredArgs := ft.NumIn()
+
+	if len(args) == numRequiredArgs+1 {
+		if flag, ok := args[len(args)-1].(bool); ok {
+			recursive = flag
+			args = args[:len(args)-1] // Remove the flag from args
+		}
+	}
+
+	if len(args) != numRequiredArgs {
+		panic(fmt.Sprintf("Async: function expects %d arguments, but got %d", numRequiredArgs, len(args)))
+	}
+
 	p := newPending[T]()
 
 	// Start a goroutine to execute the function in parallel
@@ -77,7 +99,7 @@ func Async[T any](f interface{}, args ...interface{}) *Promise[T] {
 			}
 		}()
 		// Execute the function and get the result
-		output := executeFunction[T](f, args...)
+		output := executeFunction[T](f, recursive, args...)
 		// Assign the result to the Promise and signal readiness
 		p.resolve(output)
 	}()
@@ -88,15 +110,38 @@ func Async[T any](f interface{}, args ...interface{}) *Promise[T] {
 // Sync executes function f synchronously with the provided arguments.
 // If any argument is a Promise, it waits for it to be ready before executing f.
 // It enforces that function f has exactly one return value of type T.
+// It accepts an optional boolean flag as the last argument to enable recursive resolving.
 func Sync[T any](f interface{}, args ...interface{}) T {
+	var recursive bool
+
+	// Detect if the last argument is a boolean flag for recursive resolving
+	fv := reflect.ValueOf(f)
+	if fv.Kind() != reflect.Func {
+		panic(fmt.Sprintf("Sync: expected a function, but got %T", f))
+	}
+	ft := fv.Type()
+	numRequiredArgs := ft.NumIn()
+
+	if len(args) == numRequiredArgs+1 {
+		if flag, ok := args[len(args)-1].(bool); ok {
+			recursive = flag
+			args = args[:len(args)-1] // Remove the flag from args
+		}
+	}
+
+	if len(args) != numRequiredArgs {
+		panic(fmt.Sprintf("Sync: function expects %d arguments, but got %d", numRequiredArgs, len(args)))
+	}
+
 	// Execute the function and return the result
-	return executeFunction[T](f, args...)
+	return executeFunction[T](f, recursive, args...)
 }
 
 // executeFunction is a helper that encapsulates the common logic for Async and Sync.
 // It validates the function, resolves arguments based on the expected parameter types,
 // invokes the function, and asserts the return type.
-func executeFunction[T any](f interface{}, args ...interface{}) T {
+// The 'recursive' flag determines whether to resolve promises recursively.
+func executeFunction[T any](f interface{}, recursive bool, args ...interface{}) T {
 	fv := reflect.ValueOf(f)
 	ft := fv.Type()
 
@@ -115,14 +160,25 @@ func executeFunction[T any](f interface{}, args ...interface{}) T {
 		panic(fmt.Sprintf("pas.executeFunction: function expects %d arguments, but got %d", ft.NumIn(), len(args)))
 	}
 
-	// Resolve arguments based on the expected parameter types
+	// Resolve arguments based on the expected parameter types and the 'recursive' flag
 	resolvedArgs := make([]reflect.Value, len(args))
 	for i, arg := range args {
 		expectedType := ft.In(i)
-		resolved, err := resolveValue(arg, expectedType)
+		var resolved interface{}
+		var err error
+
+		if recursive {
+			// Recursive resolving using resolveValue
+			resolved, err = resolveValue(arg, expectedType)
+		} else {
+			// Shallow resolving: only resolve top-level promises
+			resolved, err = shallowResolve(arg, expectedType)
+		}
+
 		if err != nil {
 			panic(fmt.Sprintf("pas.executeFunction: error resolving argument %d: %v", i, err))
 		}
+
 		// Handle nil inputs by setting zero value if necessary
 		if resolved == nil {
 			resolvedArgs[i] = reflect.Zero(expectedType)
@@ -158,6 +214,24 @@ func executeFunction[T any](f interface{}, args ...interface{}) T {
 	return output
 }
 
+// shallowResolve resolves only the top-level promises without delving into nested structures.
+// It returns the resolved value or the original value if it's not a promise.
+func shallowResolve(input interface{}, expectedType reflect.Type) (interface{}, error) {
+	if input == nil {
+		// Return zero value of expectedType
+		return reflect.Zero(expectedType).Interface(), nil
+	}
+
+	// Handle Promise
+	if promise, ok := input.(promiseTypeContract); ok {
+		resolved := promise.get()
+		return resolved, nil
+	}
+
+	// If not a Promise, return as-is
+	return input, nil
+}
+
 // resolveValue recursively resolves Promises within the input based on the expectedType.
 // It handles Promises, pointers, slices, arrays, maps, and nested combinations thereof.
 // expectedType defines the type that the resolved value should conform to.
@@ -181,6 +255,9 @@ func resolveValue(input interface{}, expectedType reflect.Type) (interface{}, er
 			return nil, fmt.Errorf("expected a pointer of type %s, but got %s", expectedType, currentType)
 		}
 		// Resolve the value the pointer points to
+		if reflect.ValueOf(input).IsNil() {
+			return reflect.Zero(expectedType).Interface(), nil
+		}
 		resolvedElem, err := resolveValue(reflect.ValueOf(input).Elem().Interface(), expectedType.Elem())
 		if err != nil {
 			return nil, err
@@ -264,4 +341,25 @@ func resolveValue(input interface{}, expectedType reflect.Type) (interface{}, er
 		}
 		return nil, fmt.Errorf("cannot assign or convert %s to %s", inputVal.Type(), expectedType)
 	}
+}
+
+// shallowResolveArgs processes the arguments, waiting for any Promise to be ready and retrieving its value.
+// If an argument is not a Promise, it is used as-is.
+// This function is kept for reference but is not used directly as per the new implementation.
+func shallowResolveArgs(args ...interface{}) []reflect.Value {
+	resolved := make([]reflect.Value, len(args))
+
+	for i, arg := range args {
+		// Type assertion to check if arg implements promiseTypeContract
+		if promiseArg, ok := arg.(promiseTypeContract); ok {
+			// Retrieve the value from the promise
+			value := promiseArg.get()
+			resolved[i] = reflect.ValueOf(value)
+		} else {
+			// Use the argument as-is
+			resolved[i] = reflect.ValueOf(arg)
+		}
+	}
+
+	return resolved
 }
