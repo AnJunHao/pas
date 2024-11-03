@@ -68,10 +68,10 @@ fmt.Println(sum)
 
 ## Installation
 
-To install the latest version of PAS package, use `go get`:
+To install or upgrade the latest version of PAS package, use `go get`:
 
 ```bash
-go get github.com/AnJunHao/pas@latest
+go get -u github.com/AnJunHao/pas
 ```
 
 ## Usage
